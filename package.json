@@ -1,0 +1,22 @@
+{
+  "name": "cs_554_assignment_6",
+  "version": "1.0.0",
+  "description": "Simple program showing Inter-Process Communication",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"node worker/index.js\" \"node server/index.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Macari Michael",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.0",
+    "bluebird": "^3.5.5",
+    "body-parser": "^1.19.0",
+    "concurrently": "^4.1.1",
+    "express": "^4.17.1",
+    "node-redis-pubsub": "^4.0.0",
+    "node-uuid": "^1.4.8",
+    "redis": "^2.8.0"
+  }
+}
