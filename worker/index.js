@@ -30,22 +30,19 @@ async function main(){
       
         let messageText = message.data.message;
         let successEvent = `${eventName}:success:${requestId}`;
-        let failedEvent = `${eventName}:failed:${requestId}`
+        let failedEvent = `${eventName}:failed:${requestId}`;
 
         let id = parseInt(messageText);
 
         // If the id is invalid, we send a failed event
-        if(isNaN(id) || id <= 0 || id > users.length) {
+        if(isNaN(id) || id <= 0) {
             redisConnection.emit(failedEvent, {
                 requestId,
                 eventName,
                 data: {message: "Invalid ID"}
             })
         }
-
-
         let person = {}
-
         // Search for the person in the downloaded data
         for(let i=0; i < users.length; i++) {
             if(String(users[i].id) === messageText){
@@ -53,6 +50,17 @@ async function main(){
                 break
             }
         }
+        
+        // If person is an empty object after search, person with ID was not found, so we emit the failed event
+        if(Object.keys(person).length === 0 && person.constructor === Object){
+            redisConnection.emit(failedEvent, {
+                requestId,
+                eventName,
+                data: {message: "Person with that ID does not exist"}
+            })
+            return;
+        }
+
         // Emit success event
         redisConnection.emit(successEvent, {
           requestId: requestId,
@@ -61,12 +69,95 @@ async function main(){
         });
     })
 
+    redisConnection.on('create-user:request:*', async (message, channel) => {
+        let requestId = message.requestId;
+        let eventName = message.eventName;
+      
+        let messageText = message.data.message;
+        let successEvent = `${eventName}:success:${requestId}`;
+        let failedEvent = `${eventName}:failed:${requestId}`;
 
+        // Validate that the object being created is valid with correct properties
+        let keysRequired = ['id', 'first_name', 'last_name', 'email', 'gender', 'ip_address']
+        for(let i=0; i < keysRequired.length; i++){
+            // If the object being passed does not contain a key in the list
+            if(!messageText.hasOwnProperty(keysRequired[i])){
+                // Emit failed event
+                redisConnection.emit(failedEvent, {
+                    requestId,
+                    eventName,
+                    data: {message: "Error: Missing fields"}
+                })
+                return;
+            }
+        }
+
+        // Iterate through the keys in the object
+        for(let key in messageText){
+            // If any of the keys arent in the required list, we emit a failed event
+            if(!keysRequired.includes(key)){
+                // Emit failed event
+                redisConnection.emit(failedEvent, {
+                    requestId,
+                    eventName,
+                    data: {message: "Error: Additional Fields"}
+                })
+                return;
+            }
+
+            // Check that the id field is a valid ID
+            if(key === 'id'){
+                // If the ID field is not a number, or the ID field is less than 0, we emit a failed event
+                if(isNaN(parseInt(messageText[key])) || parseInt(messageText[key]) <= 0){
+                    redisConnection.emit(failedEvent, {
+                        requestId,
+                        eventName,
+                        data: {message: "Error: ID is not valid, must be a number and greater than 0"}
+                    })
+                    return;
+                }
+            }
+            // Check that all remaining fields are strings
+            else {
+                if(typeof messageText[key] !== 'string'){
+                    redisConnection.emit(failedEvent, {
+                        requestId,
+                        eventName,
+                        data: {message: "Error: All fields that are not ID need to be a string"}
+                    })
+                    return;
+                }
+            }
+        }
+        // Last check to make sure ID is not already in DB
+        for(let i=0; i < users.length; i++){
+            if(users[i].id == messageText.id){
+                redisConnection.emit(failedEvent, {
+                    requestId,
+                    eventName,
+                    data: {message: "Error: Person with that ID already exists"}
+                })
+                return;
+            }
+        }
+
+        // End of error checking for object properties passed in
+        
+        // If all error checking passes, then we can add the object to the data base and emit a success event
+        users.push(messageText);
+        
+        redisConnection.emit(successEvent, {
+            requestId: requestId,
+            data: messageText,
+            eventName: eventName
+        });
+    })
 
 
 
 }
 
+// Async main
 main()
 console.log("Worker is running...")
 

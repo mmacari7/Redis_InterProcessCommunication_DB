@@ -6,10 +6,10 @@ const bodyParser = require("body-parser");
 
 app.use(bodyParser.json());
 
+// Route for getting person by ID through Redis
 app.get("/api/people/:id", async (req, res) => {
     
     let id = req.params.id;
-
     // Try sending the request
     try{
         let response = await nrpSender.sendMessage({
@@ -18,6 +18,7 @@ app.get("/api/people/:id", async (req, res) => {
             data: {message: id},
             expectsResponse: true
         })
+
         // Output the response
         res.json(response);
     }
@@ -25,12 +26,23 @@ app.get("/api/people/:id", async (req, res) => {
         // If failed event we output the response from failed event
         res.json(e);
     }
-
-    
-
-
 })
 
+app.post('/api/people', async (req, res) => {
+    try {
+        let response = await nrpSender.sendMessage({
+            redis: redisConnection,
+            eventName: "create-user",
+            data: {message: req.body},
+            expectsResponse: true
+        })
+        // Output response if success
+        res.json(response);
+    }
+    catch(e){
+        res.json(e);
+    }
+})
 
 
 app.listen(3000, () => {
