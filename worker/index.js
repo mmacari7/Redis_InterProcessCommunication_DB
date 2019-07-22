@@ -129,6 +129,7 @@ async function main(){
                 }
             }
         }
+
         // Last check to make sure ID is not already in DB
         for(let i=0; i < users.length; i++){
             if(users[i].id == messageText.id){
@@ -148,15 +149,178 @@ async function main(){
         
         redisConnection.emit(successEvent, {
             requestId: requestId,
-            data: messageText,
+            data: {"created": messageText},
             eventName: eventName
         });
+        return;
     })
 
+    redisConnection.on('delete-user-by-id:request:*', async (message, channel) => {
+        let requestId = message.requestId;
+        let eventName = message.eventName;
+      
+        let messageText = message.data.message;
+        let successEvent = `${eventName}:success:${requestId}`;
+        let failedEvent = `${eventName}:failed:${requestId}`;
 
+        let id = parseInt(messageText);
 
+        // If the id is invalid, we send a failed event
+        if(isNaN(id) || id <= 0) {
+            redisConnection.emit(failedEvent, {
+                requestId,
+                eventName,
+                data: {message: "Invalid ID"}
+            })
+            return;
+        }
+
+        let index;
+        let person = {}
+        // Search for the person in the downloaded data
+        for(let i=0; i < users.length; i++) {
+            if(String(users[i].id) === messageText){
+                index = i;
+                person = users[i]
+                break
+            }
+        }
+        
+        // If person is an empty object after search, person with ID was not found, so we emit the failed event
+        if(Object.keys(person).length === 0 && person.constructor === Object){
+            redisConnection.emit(failedEvent, {
+                requestId,
+                eventName,
+                data: {message: "Person with that ID does not exist"}
+            })
+            return;
+        }
+
+        if(index){
+            users.splice(index, 1)
+        }
+
+        redisConnection.emit(successEvent, {
+            requestId: requestId,
+            data: {"deleted": person},
+            eventName: eventName
+        });
+        return;
+
+    })
+
+    redisConnection.on('update-user-by-id:request:*', async (message, channel) => {
+        let requestId = message.requestId;
+        let eventName = message.eventName;
+      
+        let messageText = message.data.message;
+        let successEvent = `${eventName}:success:${requestId}`;
+        let failedEvent = `${eventName}:failed:${requestId}`;
+
+        let updates = message.data.updates;
+        let id = parseInt(messageText);
+
+        // If the id is invalid, we send a failed event
+        if(isNaN(id) || id <= 0) {
+            redisConnection.emit(failedEvent, {
+                requestId,
+                eventName,
+                data: {message: "Invalid ID"}
+            })
+            return;
+        }
+
+        let index;
+        let person = {}
+        // Search for the person in the downloaded data
+        for(let i=0; i < users.length; i++) {
+            if(String(users[i].id) === messageText){
+                index = i;
+                person = users[i]
+                break
+            }
+        }
+        
+        // If person is an empty object after search, person with ID was not found, so we emit the failed event
+        if(Object.keys(person).length === 0 && person.constructor === Object){
+            redisConnection.emit(failedEvent, {
+                requestId,
+                eventName,
+                data: {message: "Person with that ID does not exist"}
+            })
+            return;
+        }
+
+        // Validate that the object being created is valid with correct properties
+        let keysRequired = ['id', 'first_name', 'last_name', 'email', 'gender', 'ip_address']
+        
+        // Iterate through the keys in the object
+        for(let key in updates){
+            // If any of the keys arent in the required list, we emit a failed event
+            if(!keysRequired.includes(key)){
+                // Emit failed event
+                redisConnection.emit(failedEvent, {
+                    requestId,
+                    eventName,
+                    data: {message: "Error: Additional Fields"}
+                })
+                return;
+            }
+
+            // Check that the id field is a valid ID
+            if(key === 'id'){
+                // If the ID field is not a number, or the ID field is less than 0, we emit a failed event
+                if(isNaN(parseInt(updates[key])) || parseInt(updates[key]) <= 0){
+                    redisConnection.emit(failedEvent, {
+                        requestId,
+                        eventName,
+                        data: {message: "Error: ID is not valid, must be a number and greater than 0"}
+                    })
+                    return;
+                }
+                
+                for(let i=0; i < users.length; i++){
+                    if(String(updates[key]) == String(users[i][key])){
+                        redisConnection.emit(failedEvent, {
+                            requestId,
+                            eventName,
+                            data: {message: "Error: A person in DB with that ID already exists"}
+                        })
+                        return;
+                    }
+                }
+
+            }
+            // Check that all remaining fields are strings
+            else {
+                if(typeof updates[key] !== 'string'){
+                    redisConnection.emit(failedEvent, {
+                        requestId,
+                        eventName,
+                        data: {message: "Error: All fields that are not ID need to be a string"}
+                    })
+                    return;
+                }
+            }
+        }
+
+        // Set the fields for the updates passed
+        for(let key in updates){
+            person[key] = updates[key];
+        }
+
+        // Update the user in DB
+        users[index] = person;
+
+        // Emit Success Event
+        redisConnection.emit(successEvent, {
+            requestId: requestId,
+            data: {"updated": person},
+            eventName: eventName
+        });
+        return;
+    })
 }
-
 // Async main
 main()
 console.log("Worker is running...")
